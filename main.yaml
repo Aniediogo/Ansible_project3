@@ -1,0 +1,93 @@
+# This project us centered installing docker and docker compose on an EC2 instance
+# in aws and starting docker containers to run an application
+# The steps involved in this project includes
+# 1. Automate the creation of an EC2 instance using Terraform
+# 2. Configure ansible inventory to connect to AWS EC2 instance
+# 3. Write playbook that install docker and docker-compose on the server.
+# 4. Copy a doocker compose file to the server
+# 5. Start containers that are defined in that docker compose file.
+
+---
+- name: Install Python3 using yum package manager
+  hosts: docker_server
+  become: yes #by default, become is usually root, anyother user other than root, there will be a second line of become_user: <user>
+  tasks: 
+   - name: install Python3 and docker #python2 is needed to install python3 and secondly, # since "yum" needs by default can only use python2 instead of python3, it will be parsed as a variable
+     vars: 
+       ansible_python_interpreter: /usr/bin/python2
+     yum: 
+       name: 
+        - python3
+        - docker
+       update_cache: yes
+       state: present
+
+- name: Download and instal docker-compose
+  hosts: docker-server
+  become: yes
+  tasks: 
+   - name: Install docker-compose
+     get_url: 
+      url: https://github.com/docker/compose/release/download/1.27.4/docker-compose-Linux-{{lookup('pipe', 'uname -m')}}
+      dest: /usr/local/bin/docker-compose
+      mode: +x
+
+- name: start docker
+  hosts: docker_server
+  become: yes
+  tasks: 
+   - name: start docker daemon
+     systemd: 
+       name: docker
+       state: started
+   - name: install python pip for docker
+     pip:
+      - name:
+          - docker
+          - docker-compose
+         
+
+- name: add ec2-user to docker group
+  hosts: docker_server
+  become: yes
+  tasks: 
+   - name: add ec2-user to docker group
+     user: 
+       name: ec2-user
+       groups: docker
+       append: yes
+   - name:  Reconnect to server #what this block of task does is to restart the server
+     meta: reset_connecion
+
+- name: Test docker pull
+  hosts: docker_server
+  tasks: 
+   - name: pull redis image
+     command: docker pull redis
+     register: pull_results
+   - debug: msg={{pull_results}}
+
+- name: Run docker containers
+  hosts: docker_server
+  tasks: 
+   - name: Copy docker-compose file
+     copy:
+      src: <absolute path of the docker compose on the control machine>
+      dest: <destination on the remote server>
+   - name: start docker-compose file
+     docker-compose: 
+       project_src: <location of the docker compose file on the remote server>
+       state: present
+     
+
+      
+
+
+
+
+
+
+
+
+
+
